@@ -11,7 +11,9 @@ export class TranscriptionController {
     const language = req.body?.language as string | undefined;
 
     const controller = new AbortController();
-    req.on("close", () => controller.abort());
+    res.on("close", () => {
+      if (!res.writableEnded) controller.abort();
+    });
 
     const result = await this.transcribeAudio.execute(
       req.auth!.userId,
