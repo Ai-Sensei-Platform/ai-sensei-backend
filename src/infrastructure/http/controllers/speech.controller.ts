@@ -8,7 +8,9 @@ export class SpeechController {
   /** POST /api/speak — returns an audio clip for one sentence. */
   speak = async (req: Request, res: Response): Promise<void> => {
     const controller = new AbortController();
-    req.on("close", () => controller.abort());
+    res.on("close", () => {
+      if (!res.writableEnded) controller.abort();
+    });
 
     const clip = await this.synthesizeSpeech.execute(
       req.auth!.userId,
