@@ -10,14 +10,12 @@ import type { StreamChatUseCase } from "@/application/use-cases/chat/stream-chat
  * the stream is open, every event — including errors — is an SSE frame.
  */
 export class ChatController {
-  constructor(private readonly streamChat: StreamChatUseCase) { }
+  constructor(private readonly streamChat: StreamChatUseCase) {}
 
   stream = async (req: Request, res: Response): Promise<void> => {
     // Bridge the client disconnecting (fetch abort / call ended) to the tutor.
     const controller = new AbortController();
-    res.on("close", () => {
-      if (!res.writableEnded) controller.abort();
-    });
+    req.on("close", () => controller.abort());
 
     // Identity comes from the verified session, never the request body.
     const input = { ...req.body, userId: req.auth!.userId };
