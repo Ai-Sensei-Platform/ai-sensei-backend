@@ -11,7 +11,7 @@ const OAUTH_STATE_MAX_AGE_MS = 10 * 60_000;
 function baseOptions(): CookieOptions {
   return {
     httpOnly: true,
-    secure: ENV_CONFIG.NODE_ENV !== "development",
+    secure: ENV_CONFIG.NODE_ENV === "production",
     sameSite: "lax",
     path: "/"
   };
