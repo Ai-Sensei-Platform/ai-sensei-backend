@@ -9,6 +9,7 @@ import { UploadDocumentUseCase } from "@/application/use-cases/documents/upload-
 import { CreateUploadUrlUseCase } from "@/application/use-cases/documents/create-upload-url.use-case";
 import { RegisterUploadUseCase } from "@/application/use-cases/documents/register-upload.use-case";
 import { LoadLessonPagesUseCase } from "@/application/use-cases/documents/load-lesson-pages.use-case";
+import { PrepareLessonPagesUseCase } from "@/application/use-cases/documents/prepare-lesson-pages.use-case";
 import { StreamChatUseCase } from "@/application/use-cases/chat/stream-chat.use-case";
 import { SynthesizeSpeechUseCase } from "@/application/use-cases/speech/synthesize-speech.use-case";
 import { TranscribeAudioUseCase } from "@/application/use-cases/transcription/transcribe-audio.use-case";
@@ -18,7 +19,6 @@ import { AuthenticateWithGoogleUseCase } from "@/application/use-cases/auth/auth
 import { RefreshSessionUseCase } from "@/application/use-cases/auth/refresh-session.use-case";
 import { GetCurrentUserUseCase } from "@/application/use-cases/auth/get-current-user.use-case";
 
-import { ChunkRanker } from "@/domain/logic/retrieval/chunk-ranker";
 import { CitationResolver } from "@/domain/logic/citation/citation-resolver";
 import { TextNormalizer } from "@/domain/logic/citation/text-normalizer";
 import { TokenSimilarity } from "@/domain/logic/citation/token-similarity";
@@ -26,11 +26,14 @@ import { QuoteLocator } from "@/domain/logic/citation/quote-locator";
 import { DocumentReferenceFactory } from "@/domain/logic/citation/document-reference-factory";
 import { ReferenceSelector } from "@/domain/logic/citation/reference-selector";
 import { LearnerQuestionExtractor } from "@/domain/logic/question/learner-question-extractor";
-import { DocumentChunker } from "@/domain/logic/retrieval/document-chunker";
 import { UploadValidator } from "@/domain/logic/upload-validator";
 import { FileNaming } from "@/domain/logic/file-naming";
 import { ChatHistorySanitizer } from "@/domain/logic/chat-history-sanitizer";
 import { CostCalculator } from "@/domain/logic/cost/cost-calculator";
+import { ReadingOrderBuilder } from "@/domain/logic/pdf/reading-order-builder";
+import { ScriptDirection } from "@/domain/logic/pdf/script-direction";
+import { OcrScriptDetector } from "@/domain/logic/pdf/ocr-script-detector";
+import { RtlVisualOrderConverter } from "@/domain/logic/pdf/rtl-visual-order-converter";
 
 import { initializeDatabase } from "@/infrastructure/database/data-source";
 import { TypeOrmDocumentRepository } from "@/infrastructure/database/repositories/typeorm-document.repository";
@@ -42,11 +45,13 @@ import { JwtTokenService } from "@/infrastructure/services/auth/jwt-token.servic
 import { CryptoIdGenerator } from "@/infrastructure/services/generators/crypto-id-generator";
 
 import { S3FileStorage } from "@/infrastructure/services/storage/s3-file-storage";
-import { PdfJsTextExtractor } from "@/infrastructure/services/documents/pdfjs-text-extractor";
+// import { PdfJsTextExtractor } from "@/infrastructure/services/documents/pdfjs-text-extractor";
+import { PdfiumPageRenderer } from "@/infrastructure/services/documents/pdfium-page-renderer";
+import { PaddleOcrTextExtractor } from "@/infrastructure/services/documents/paddle-ocr-text-extractor";
+import { HfVlTextExtractor } from "@/infrastructure/services/documents/hf-vl-text-extractor";
+import { DocLayoutRegionDetector } from "@/infrastructure/services/documents/doclayout-region-detector";
 import { InMemoryPageCache } from "@/infrastructure/services/cache/in-memory-page-cache";
 import { OpenAiTutorService } from "@/infrastructure/services/ai/openai-tutor.service";
-import { TutorToolExecutor } from "@/infrastructure/services/ai/tutor-tool-executor";
-import { OpenAiEmbeddingService } from "@/infrastructure/services/ai/openai-embedding.service";
 import { OpenAiTextToSpeechService } from "@/infrastructure/services/ai/openai-text-to-speech.service";
 import { OpenAiSpeechToTextService } from "@/infrastructure/services/ai/openai-speech-to-text.service";
 import { ConsoleLogger } from "@/infrastructure/logging/console-logger";
@@ -77,32 +82,47 @@ export async function buildContainer(): Promise<Container> {
   // ─── Domain services (pure business logic) ───────────────────────────────
   const tokenizer = new TokenSimilarity();
   const textNormalizer = new TextNormalizer();
-  const chunkRanker = new ChunkRanker(tokenizer);
   const quoteLocator = new QuoteLocator(textNormalizer, tokenizer);
   const citationResolver = new CitationResolver(quoteLocator, textNormalizer);
   const referenceFactory = new DocumentReferenceFactory();
   const referenceSelector = new ReferenceSelector(citationResolver, referenceFactory);
   const learnerQuestionExtractor = new LearnerQuestionExtractor();
-  const documentChunker = new DocumentChunker(idGenerator, textNormalizer);
   const uploadValidator = new UploadValidator();
   const fileNaming = new FileNaming();
   const historySanitizer = new ChatHistorySanitizer();
   const costCalculator = new CostCalculator(MODEL_PRICING, logger);
+  const readingOrderBuilder = new ReadingOrderBuilder();
 
   // ─── Infrastructure adapters (implement domain ports) ────────────────────
-  const documentRepository = new TypeOrmDocumentRepository(dataSource, idGenerator);
+  const documentRepository = new TypeOrmDocumentRepository(dataSource);
   const userRepository = new TypeOrmUserRepository(dataSource, idGenerator);
   const userCostRepository = new TypeOrmUserCostRepository(dataSource);
   const oauthProvider = new GoogleOAuthService(ENV_CONFIG);
   const tokenService = new JwtTokenService(ENV_CONFIG);
   const fileStorage = new S3FileStorage(ENV_CONFIG);
-  const textExtractor = PdfJsTextExtractor.createDefault();
+
+  // const textExtractor = new HfVlTextExtractor(
+  //   ENV_CONFIG,
+  //   new PdfiumPageRenderer(),
+  //   textNormalizer,
+  //   logger
+  // );
+
+  const textExtractor = new PaddleOcrTextExtractor(
+    new PdfiumPageRenderer(),
+    new DocLayoutRegionDetector(logger),
+    readingOrderBuilder,
+    textNormalizer,
+    new ScriptDirection(),
+    new RtlVisualOrderConverter(),
+    new OcrScriptDetector(),
+    logger
+  );
+
+  // const textExtractor = PdfJsTextExtractor.createDefault();
   const pageCache = new InMemoryPageCache();
-  const embeddingService = new OpenAiEmbeddingService(ENV_CONFIG, logger);
-  const tutorToolExecutor = new TutorToolExecutor(embeddingService, chunkRanker, referenceFactory);
   const tutorService = new OpenAiTutorService(
     ENV_CONFIG,
-    tutorToolExecutor,
     referenceSelector,
     learnerQuestionExtractor,
     logger
@@ -141,6 +161,11 @@ export async function buildContainer(): Promise<Container> {
     fileStorage,
     textExtractor,
     pageCache,
+    logger
+  );
+  const prepareLessonPages = new PrepareLessonPagesUseCase(
+    documentRepository,
+    loadLessonPages,
     logger
   );
   const getDocument = new GetDocumentUseCase(documentRepository);
@@ -193,7 +218,8 @@ export async function buildContainer(): Promise<Container> {
       getDocumentFile,
       listDocuments,
       deleteDocument,
-      endLessonSession
+      endLessonSession,
+      prepareLessonPages
     ),
     chat: new ChatController(streamChat),
     speech: new SpeechController(synthesizeSpeech),

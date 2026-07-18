@@ -1,4 +1,4 @@
-import type { DocumentChunk, DocumentPage, DocumentRecord } from "@/domain/entities/document";
+import type { DocumentPage, DocumentRecord } from "@/domain/entities/document";
 import type { ChatMessage, Reference } from "@/domain/entities/chat";
 import type { AiUsage } from "@/domain/services/ai-usage";
 
@@ -6,6 +6,7 @@ export type TutorStreamEvent =
   | { type: "delta"; text: string }
   | { type: "reference"; reference: Reference }
   | { type: "question"; text: string }
+  | { type: "end" }
   | { type: "usage"; usage: AiUsage };
 
 export interface TutorReplyRequest {
@@ -14,9 +15,8 @@ export interface TutorReplyRequest {
   readonly language: string;
   readonly history: ReadonlyArray<ChatMessage>;
   readonly pages: DocumentPage[];
-  readonly chunks: DocumentChunk[];
   readonly selectedPages: number[];
-  readonly saveCost: boolean;
+  readonly allowAsking: boolean;
 }
 
 export interface TutorService {
