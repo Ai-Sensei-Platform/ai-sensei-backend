@@ -41,10 +41,10 @@ export const streamChatValidation: RequestHandler[] = [
     .isInt({ min: 1 })
     .withMessage("Page numbers must be positive integers.")
     .toInt(),
-  body("saveCost")
-    .customSanitizer((value) => (value === undefined ? false : value))
+  body("teacherAsks")
+    .customSanitizer((value) => (value === undefined ? true : value))
     .isBoolean()
-    .withMessage("saveCost must be a boolean.")
+    .withMessage("teacherAsks must be a boolean.")
     .toBoolean(),
   handleValidationErrors
 ];

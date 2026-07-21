@@ -8,6 +8,9 @@ import type { UploadDocumentUseCase } from "@/application/use-cases/documents/up
 import type { CreateUploadUrlUseCase } from "@/application/use-cases/documents/create-upload-url.use-case";
 import type { RegisterUploadUseCase } from "@/application/use-cases/documents/register-upload.use-case";
 import type { EndLessonSessionUseCase } from "@/application/use-cases/documents/end-lesson-session.use-case";
+import type { PrepareLessonPagesUseCase } from "@/application/use-cases/documents/prepare-lesson-pages.use-case";
+import type { ExtractDocumentPagesUseCase } from "@/application/use-cases/documents/extract-document-pages.use-case";
+import type { PageExtractionEvent } from "@/application/dto/page-extraction-event";
 
 export class DocumentsController {
   constructor(
@@ -18,13 +21,50 @@ export class DocumentsController {
     private readonly getDocumentFile: GetDocumentFileUseCase,
     private readonly listDocuments: ListDocumentsUseCase,
     private readonly deleteDocument: DeleteDocumentUseCase,
-    private readonly endLessonSession: EndLessonSessionUseCase
+    private readonly endLessonSession: EndLessonSessionUseCase,
+    private readonly prepareLessonPages: PrepareLessonPagesUseCase,
+    private readonly extractDocumentPages: ExtractDocumentPagesUseCase
   ) { }
 
   /** POST /api/documents/session/end — releases the user's cached lesson pages. */
   endSession = async (req: Request, res: Response): Promise<void> => {
     await this.endLessonSession.execute(req.auth!.userId);
     res.status(204).end();
+  };
+
+  /** GET /api/documents/:id/pages/extract-stream — SSE stream that drives*/
+  extractStream = async (req: Request, res: Response): Promise<void> => {
+    const controller = new AbortController();
+    req.on("close", () => controller.abort());
+
+    const events = await this.extractDocumentPages.execute(
+      { userId: req.auth!.userId, documentId: String(req.params.id) },
+      controller.signal
+    );
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no"
+    });
+
+    for await (const event of events) {
+      if (controller.signal.aborted) {
+        break;
+      }
+      res.write(serializeEvent(event));
+    }
+    res.end();
+  };
+
+  preparePages = async (req: Request, res: Response): Promise<void> => {
+    const result = await this.prepareLessonPages.execute({
+      userId: req.auth!.userId,
+      documentId: String(req.params.id),
+      pageNumbers: (req.body.pageNumbers ?? []) as number[]
+    });
+    res.json(result);
   };
 
   list = async (req: Request, res: Response): Promise<void> => {
@@ -104,6 +144,10 @@ export class DocumentsController {
     });
     source.pipe(res);
   };
+}
+
+function serializeEvent(event: PageExtractionEvent): string {
+  return `event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`;
 }
 
 function contentDisposition(fileName: string): string {

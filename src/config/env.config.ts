@@ -15,12 +15,17 @@ export type EnvConfig = {
   S3_SECRET_ACCESS_KEY: string;
   OPENAI_API_KEY: string;
   OPENAI_TUTOR_MODEL: string;
-  OPENAI_TUTOR_MODEL_SAVE_COST: string;
-  OPENAI_EMBEDDING_MODEL: string;
   OPENAI_TRANSCRIBE_MODEL: string;
   OPENAI_SPEECH_MODEL: string;
   OPENAI_SPEECH_VOICE: string;
   TUTOR_LOG_VERBOSE: boolean;
+  DEFAULT_PAGE_EXTRACTION_BATCH_SIZE: number;
+
+  // ─── Hugging Face vision-language OCR (Qwen3-VL) ──────────────────────────
+  HF_TOKEN: string;
+  HF_VL_MODEL: string;
+  HF_VL_BASE_URL: string;
+  HF_VL_CONCURRENCY: number;
 
   // ─── Auth (Google OAuth + JWT cookie sessions) ───────────────────────────
   GOOGLE_CLIENT_ID: string;
@@ -31,6 +36,10 @@ export type EnvConfig = {
   ACCESS_TOKEN_TTL: string;
   REFRESH_TOKEN_TTL: string;
   FRONTEND_URL: string;
+
+  // ─── Brevo (marketing contact list for feature announcements) ────────────
+  BREVO_API_KEY: string;
+  BREVO_LIST_ID: number;
 };
 
 type EnvKey = keyof EnvConfig;
@@ -72,8 +81,6 @@ export const ENV_CONFIG: Readonly<EnvConfig> = Object.freeze({
   OPENAI_API_KEY: requireEnv("OPENAI_API_KEY"),
 
   OPENAI_TUTOR_MODEL: getEnv("OPENAI_TUTOR_MODEL") || "gpt-5.4-mini",
-  OPENAI_TUTOR_MODEL_SAVE_COST: getEnv("OPENAI_TUTOR_MODEL_SAVE_COST") || "gpt-5-nano",
-  OPENAI_EMBEDDING_MODEL: getEnv("OPENAI_EMBEDDING_MODEL") || "text-embedding-3-small",
   OPENAI_TRANSCRIBE_MODEL: getEnv("OPENAI_TRANSCRIBE_MODEL") || "gpt-4o-mini-transcribe",
   OPENAI_SPEECH_MODEL: getEnv("OPENAI_SPEECH_MODEL") || "gpt-4o-mini-tts",
   OPENAI_SPEECH_VOICE: getEnv("OPENAI_SPEECH_VOICE") || "alloy",
@@ -82,6 +89,12 @@ export const ENV_CONFIG: Readonly<EnvConfig> = Object.freeze({
     getEnv("TUTOR_LOG_VERBOSE"),
     (getEnv("NODE_ENV") || "development") !== "production"
   ),
+  DEFAULT_PAGE_EXTRACTION_BATCH_SIZE: Number(getEnv("DEFAULT_PAGE_EXTRACTION_BATCH_SIZE")) || 4,
+
+  HF_TOKEN: getEnv("HF_TOKEN") || "",
+  HF_VL_MODEL: getEnv("HF_VL_MODEL") || "Qwen/Qwen3-VL-30B-A3B-Instruct",
+  HF_VL_BASE_URL: getEnv("HF_VL_BASE_URL") || "https://router.huggingface.co/v1",
+  HF_VL_CONCURRENCY: Number(getEnv("HF_VL_CONCURRENCY")) || 5,
 
   // ─── Auth (Google OAuth + JWT cookie sessions) ───────────────────────────
   GOOGLE_CLIENT_ID: requireEnv("GOOGLE_CLIENT_ID"),
@@ -92,4 +105,7 @@ export const ENV_CONFIG: Readonly<EnvConfig> = Object.freeze({
   ACCESS_TOKEN_TTL: getEnv("ACCESS_TOKEN_TTL") || "1d",
   REFRESH_TOKEN_TTL: getEnv("REFRESH_TOKEN_TTL") || "7d",
   FRONTEND_URL: getEnv("FRONTEND_URL") || "http://localhost:5173",
+
+  BREVO_API_KEY: getEnv("BREVO_API_KEY") || "",
+  BREVO_LIST_ID: Number(getEnv("BREVO_LIST_ID")) || 0,
 });

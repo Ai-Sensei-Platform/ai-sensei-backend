@@ -20,7 +20,7 @@ export interface StreamChatInput {
   readonly language: string;
   readonly messages: ChatMessage[];
   readonly selectedPages: number[];
-  readonly saveCost: boolean;
+  readonly teacherAsks?: boolean;
 }
 
 export class StreamChatUseCase {
@@ -46,7 +46,7 @@ export class StreamChatUseCase {
 
     log.info(
       `question on document ${documentId} · lang=${input.language} · ` +
-      `saveCost=${input.saveCost} · history=${input.messages.length} msg(s)`
+      `history=${input.messages.length} msg(s)`
     );
     log.detail("student message", message);
 
@@ -70,11 +70,9 @@ export class StreamChatUseCase {
       pageNumbers: selectedPages
     });
 
-    const chunks: never[] = [];
-
     log.info(
       `loaded document "${document.title}" · ${pages.length} lesson page(s) · ` +
-      `chunks disabled · ${history.length} history turn(s) · ` +
+      `${history.length} history turn(s) · ` +
       `lesson pages=[${selectedPages.join(", ")}] → streaming answer`
     );
 
@@ -116,9 +114,8 @@ export class StreamChatUseCase {
               language: input.language,
               history,
               pages,
-              chunks,
               selectedPages,
-              saveCost: input.saveCost
+              allowAsking: input.teacherAsks ?? true
             },
             signal
           )) {
@@ -127,6 +124,8 @@ export class StreamChatUseCase {
               queue.push({ event: "meta", data: { reference: event.reference } });
             } else if (event.type === "question") {
               queue.push({ event: "question", data: { text: event.text } });
+            } else if (event.type === "end") {
+              queue.push({ event: "end-session", data: {} });
             } else if (event.type === "usage") {
               await costTracker.track(userId, event.usage, { countAsQuestion: true });
             } else {
