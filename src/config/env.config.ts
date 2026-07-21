@@ -19,6 +19,7 @@ export type EnvConfig = {
   OPENAI_SPEECH_MODEL: string;
   OPENAI_SPEECH_VOICE: string;
   TUTOR_LOG_VERBOSE: boolean;
+  DEFAULT_PAGE_EXTRACTION_BATCH_SIZE: number;
 
   // ─── Hugging Face vision-language OCR (Qwen3-VL) ──────────────────────────
   HF_TOKEN: string;
@@ -35,6 +36,10 @@ export type EnvConfig = {
   ACCESS_TOKEN_TTL: string;
   REFRESH_TOKEN_TTL: string;
   FRONTEND_URL: string;
+
+  // ─── Brevo (marketing contact list for feature announcements) ────────────
+  BREVO_API_KEY: string;
+  BREVO_LIST_ID: number;
 };
 
 type EnvKey = keyof EnvConfig;
@@ -84,6 +89,7 @@ export const ENV_CONFIG: Readonly<EnvConfig> = Object.freeze({
     getEnv("TUTOR_LOG_VERBOSE"),
     (getEnv("NODE_ENV") || "development") !== "production"
   ),
+  DEFAULT_PAGE_EXTRACTION_BATCH_SIZE: Number(getEnv("DEFAULT_PAGE_EXTRACTION_BATCH_SIZE")) || 4,
 
   HF_TOKEN: getEnv("HF_TOKEN") || "",
   HF_VL_MODEL: getEnv("HF_VL_MODEL") || "Qwen/Qwen3-VL-30B-A3B-Instruct",
@@ -99,4 +105,7 @@ export const ENV_CONFIG: Readonly<EnvConfig> = Object.freeze({
   ACCESS_TOKEN_TTL: getEnv("ACCESS_TOKEN_TTL") || "1d",
   REFRESH_TOKEN_TTL: getEnv("REFRESH_TOKEN_TTL") || "7d",
   FRONTEND_URL: getEnv("FRONTEND_URL") || "http://localhost:5173",
+
+  BREVO_API_KEY: getEnv("BREVO_API_KEY") || "",
+  BREVO_LIST_ID: Number(getEnv("BREVO_LIST_ID")) || 0,
 });

@@ -10,6 +10,9 @@ import { CreateUploadUrlUseCase } from "@/application/use-cases/documents/create
 import { RegisterUploadUseCase } from "@/application/use-cases/documents/register-upload.use-case";
 import { LoadLessonPagesUseCase } from "@/application/use-cases/documents/load-lesson-pages.use-case";
 import { PrepareLessonPagesUseCase } from "@/application/use-cases/documents/prepare-lesson-pages.use-case";
+import { ExtractDocumentPagesUseCase } from "@/application/use-cases/documents/extract-document-pages.use-case";
+import { DocumentPagesStore } from "@/application/services/document-pages-store";
+import { ExtractionRegistry } from "@/application/services/extraction-registry";
 import { StreamChatUseCase } from "@/application/use-cases/chat/stream-chat.use-case";
 import { SynthesizeSpeechUseCase } from "@/application/use-cases/speech/synthesize-speech.use-case";
 import { TranscribeAudioUseCase } from "@/application/use-cases/transcription/transcribe-audio.use-case";
@@ -44,13 +47,15 @@ import { GoogleOAuthService } from "@/infrastructure/services/auth/google-oauth.
 import { JwtTokenService } from "@/infrastructure/services/auth/jwt-token.service";
 import { CryptoIdGenerator } from "@/infrastructure/services/generators/crypto-id-generator";
 
+import { BrevoContactSync } from "@/infrastructure/services/marketing/brevo-contact-sync";
+
 import { S3FileStorage } from "@/infrastructure/services/storage/s3-file-storage";
 // import { PdfJsTextExtractor } from "@/infrastructure/services/documents/pdfjs-text-extractor";
 import { PdfiumPageRenderer } from "@/infrastructure/services/documents/pdfium-page-renderer";
 import { PaddleOcrTextExtractor } from "@/infrastructure/services/documents/paddle-ocr-text-extractor";
 import { HfVlTextExtractor } from "@/infrastructure/services/documents/hf-vl-text-extractor";
 import { DocLayoutRegionDetector } from "@/infrastructure/services/documents/doclayout-region-detector";
-import { InMemoryPageCache } from "@/infrastructure/services/cache/in-memory-page-cache";
+import { StoragePageCache } from "@/infrastructure/services/cache/storage-page-cache";
 import { OpenAiTutorService } from "@/infrastructure/services/ai/openai-tutor.service";
 import { OpenAiTextToSpeechService } from "@/infrastructure/services/ai/openai-text-to-speech.service";
 import { OpenAiSpeechToTextService } from "@/infrastructure/services/ai/openai-speech-to-text.service";
@@ -101,6 +106,8 @@ export async function buildContainer(): Promise<Container> {
   const tokenService = new JwtTokenService(ENV_CONFIG);
   const fileStorage = new S3FileStorage(ENV_CONFIG);
 
+  const contactSync = new BrevoContactSync(ENV_CONFIG, logger);
+
   // const textExtractor = new HfVlTextExtractor(
   //   ENV_CONFIG,
   //   new PdfiumPageRenderer(),
@@ -120,7 +127,9 @@ export async function buildContainer(): Promise<Container> {
   );
 
   // const textExtractor = PdfJsTextExtractor.createDefault();
-  const pageCache = new InMemoryPageCache();
+  const documentPagesStore = new DocumentPagesStore(fileStorage, logger);
+  const extractionRegistry = new ExtractionRegistry();
+  const pageCache = new StoragePageCache(documentPagesStore);
   const tutorService = new OpenAiTutorService(
     ENV_CONFIG,
     referenceSelector,
@@ -174,8 +183,17 @@ export async function buildContainer(): Promise<Container> {
     fileStorage
   );
   const listDocuments = new ListDocumentsUseCase(documentRepository);
-  const deleteDocument = new DeleteDocumentUseCase(documentRepository, fileStorage);
+  const deleteDocument = new DeleteDocumentUseCase(documentRepository, fileStorage, documentPagesStore);
   const endLessonSession = new EndLessonSessionUseCase(pageCache);
+  const extractDocumentPages = new ExtractDocumentPagesUseCase(
+    documentRepository,
+    fileStorage,
+    textExtractor,
+    documentPagesStore,
+    extractionRegistry,
+    logger,
+    ENV_CONFIG.DEFAULT_PAGE_EXTRACTION_BATCH_SIZE
+  );
   const streamChat = new StreamChatUseCase(
     documentRepository,
     tutorService,
@@ -200,7 +218,8 @@ export async function buildContainer(): Promise<Container> {
   const authenticateWithGoogle = new AuthenticateWithGoogleUseCase(
     oauthProvider,
     userRepository,
-    tokenService
+    tokenService,
+    contactSync
   );
   const refreshSession = new RefreshSessionUseCase(userRepository, tokenService);
   const getCurrentUser = new GetCurrentUserUseCase(userRepository);
@@ -219,7 +238,8 @@ export async function buildContainer(): Promise<Container> {
       listDocuments,
       deleteDocument,
       endLessonSession,
-      prepareLessonPages
+      prepareLessonPages,
+      extractDocumentPages
     ),
     chat: new ChatController(streamChat),
     speech: new SpeechController(synthesizeSpeech),
